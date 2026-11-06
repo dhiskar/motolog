@@ -17,7 +17,7 @@ Aplikasi web (PWA) sederhana untuk mencatat perawatan sepeda motor: ganti oli, s
 - **Riwayat** — filter jenis, pencarian, edit & hapus.
 - **Statistik** — grafik pengeluaran bulanan, rincian per kategori, efisiensi bahan bakar.
 - **Pengingat** — pengingat manual (pajak, servis, dll.) dengan target tanggal/odo.
-- **Backup** — ekspor/impor JSON, ekspor CSV untuk Excel/Spreadsheet.
+- **Backup** — simpan JSON langsung ke folder pilihan HP lewat dialog “Simpan sebagai” (Chrome Android 132+), fallback ke folder Download; impor JSON; ekspor CSV untuk Excel/Spreadsheet.
 - **Tema** — gelap, terang, atau ikut sistem.
 - **Offline & installable** — service worker + manifest, bisa dipasang seperti aplikasi.
 
@@ -32,6 +32,14 @@ Aplikasi web (PWA) sederhana untuk mencatat perawatan sepeda motor: ganti oli, s
 5. Buka MotoLog dari layar utama. Data tetap ada meski offline.
 
 > **Penting:** data terikat pada browser dan alamat situs. Menghapus data browser, memakai mode incognito, atau mengganti domain dapat menghilangkan data. Lakukan **Pengaturan → Ekspor JSON** secara berkala sebagai backup.
+
+### Menyimpan backup ke file HP
+
+- **Chrome Android 132+ / Chrome desktop:** tombol **Ekspor backup (JSON)** membuka dialog **“Simpan sebagai”**, sehingga kamu bisa memilih folder di penyimpanan HP dan nama filenya.
+- **Browser lama / Samsung Internet:** file otomatis masuk ke folder **Download**.
+- File JSON berisi semua motor, catatan, pengingat, dan foto. Simpan juga salinan ke Google Drive atau WhatsApp.
+- Untuk memulihkan: **Pengaturan → Impor backup**.
+- Aplikasi juga berusaha meminta **penyimpanan persisten** agar data tidak mudah dihapus otomatis oleh browser saat ruang penyimpanan menipis. Ini bersifat best-effort dan tetap tidak melindungi dari penghapusan manual “cookie & data situs”.
 
 ---
 

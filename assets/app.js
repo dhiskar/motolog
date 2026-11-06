@@ -45,8 +45,7 @@
   }
 
   /* ---------------- unduh / ekspor ---------------- */
-  function download(filename, content, mime) {
-    const blob = new Blob([content], { type: mime || 'text/plain;charset=utf-8' });
+  function downloadBlob(filename, blob) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -60,18 +59,59 @@
     }, 1200);
   }
 
-  function exportJSON() {
+  // Chrome Android 132+ mendukung File System Access API. Pakai picker
+  // "Simpan sebagai" agar file bisa langsung disimpan ke folder pilihan HP.
+  async function saveFile(filename, content, opts) {
+    opts = opts || {};
+    const mime = opts.mime || 'text/plain;charset=utf-8';
+    const blob = new Blob([content], { type: mime });
+
+    if (window.showSaveFilePicker && window.isSecureContext) {
+      try {
+        const ext = '.' + filename.split('.').pop();
+        const baseMime = mime.split(';')[0];
+        const handle = await window.showSaveFilePicker({
+          suggestedName: filename,
+          types: [{
+            description: opts.label || 'File MotoLog',
+            accept: { [baseMime]: [ext] }
+          }]
+        });
+        const writable = await handle.createWritable();
+        await writable.write(blob);
+        await writable.close();
+        return 'saved';
+      } catch (e) {
+        if (e && e.name === 'AbortError') return 'cancelled';
+        // Jika picker gagal, jatuh ke unduhan biasa.
+      }
+    }
+
+    downloadBlob(filename, blob);
+    return 'downloaded';
+  }
+
+  async function exportJSON() {
     const payload = {
       app: 'MotoLog',
       version: ML.APP_VERSION,
       exportedAt: new Date().toISOString(),
       data: S
     };
-    download('motolog-backup-' + ML.todayISO() + '.json', JSON.stringify(payload, null, 2), 'application/json');
-    ML.toast('Backup berhasil diunduh', 'good');
+    const result = await saveFile(
+      'motolog-backup-' + ML.todayISO() + '.json',
+      JSON.stringify(payload, null, 2),
+      { mime: 'application/json', label: 'Backup MotoLog (.json)' }
+    );
+    if (result === 'cancelled') return;
+
+    S.settings.lastBackupAt = new Date().toISOString();
+    ML.persist();
+    if (ML.currentRoute() === 'settings') ML.render();
+    ML.toast(result === 'saved' ? 'Backup disimpan ke file' : 'Backup diunduh ke folder Download', 'good');
   }
 
-  function exportCSV() {
+  async function exportCSV() {
     const rows = [[
       'Tanggal', 'Motor', 'Jenis', 'Keterangan', 'Odometer (km)', 'Biaya (Rp)',
       'Liter', 'Harga/liter', 'Bengkel', 'Kategori', 'Catatan'
@@ -96,8 +136,13 @@
       const s = String(cell == null ? '' : cell);
       return /[",;\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
     }).join(';')).join('\r\n');
-    download('motolog-catatan-' + ML.todayISO() + '.csv', '\ufeff' + csv, 'text/csv;charset=utf-8');
-    ML.toast('CSV berhasil diunduh', 'good');
+    const result = await saveFile(
+      'motolog-catatan-' + ML.todayISO() + '.csv',
+      '\ufeff' + csv,
+      { mime: 'text/csv;charset=utf-8', label: 'Data MotoLog (.csv)' }
+    );
+    if (result === 'cancelled') return;
+    ML.toast(result === 'saved' ? 'CSV disimpan ke file' : 'CSV diunduh ke folder Download', 'good');
   }
 
   async function importFile(file) {
@@ -517,8 +562,18 @@
   }
 
   /* ---------------- init ---------------- */
+  function requestPersistentStorage() {
+    if (!navigator.storage || !navigator.storage.persist) return;
+    navigator.storage.persisted()
+      .then(function (persisted) {
+        if (!persisted) navigator.storage.persist().catch(function () { /* diabaikan */ });
+      })
+      .catch(function () { /* diabaikan */ });
+  }
+
   function init() {
     ML.loadState();
+    requestPersistentStorage();
     applyTheme();
     ML.render();
     if (window.scrollY > 4) {

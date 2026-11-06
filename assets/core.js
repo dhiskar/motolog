@@ -8,7 +8,7 @@ window.ML = (function () {
   const ML = {};
 
   const STORAGE_KEY = 'motolog.state.v1';
-  const APP_VERSION = '1.0.0';
+  const APP_VERSION = '1.0.1';
 
   const TYPE_META = {
     oil:    { label: 'Ganti oli',   short: 'Oli',    icon: 'droplet', tone: 'oil',    color: '#f97316' },
@@ -130,7 +130,8 @@ window.ML = (function () {
         oilKm: 2500,
         oilMonths: 4,
         activeBike: null,
-        installDismissed: false
+        installDismissed: false,
+        lastBackupAt: null
       }
     };
   }
@@ -205,6 +206,7 @@ window.ML = (function () {
     st.settings.oilKm = Math.max(200, num(s.oilKm) || 2500);
     st.settings.oilMonths = Math.max(1, Math.min(36, num(s.oilMonths) || 4));
     st.settings.installDismissed = !!s.installDismissed;
+    st.settings.lastBackupAt = typeof s.lastBackupAt === 'string' && s.lastBackupAt ? s.lastBackupAt : null;
     if (st.bikes.some((b) => b.id === s.activeBike)) st.settings.activeBike = s.activeBike;
     else st.settings.activeBike = st.bikes[0] ? st.bikes[0].id : null;
 

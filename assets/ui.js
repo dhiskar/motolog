@@ -600,6 +600,10 @@
     const installed = isStandalone();
     const themes = [['auto', 'Otomatis', 'monitor'], ['light', 'Terang', 'sun'], ['dark', 'Gelap', 'moon']];
     const currentTheme = S.settings.theme || 'auto';
+    const lastBackup = S.settings.lastBackupAt ? new Date(S.settings.lastBackupAt) : null;
+    const backupLabel = lastBackup && !isNaN(lastBackup.getTime())
+      ? 'terakhir ' + lastBackup.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
+      : 'belum pernah backup';
 
     return `${pageHead('Pengaturan', 'Preferensi, data, dan aplikasi')}
 
@@ -640,7 +644,7 @@
         <div class="card-head" style="padding-bottom:4px"><h2>${icon('shield')} Data & cadangan</h2></div>
         <button class="settings-row" data-act="export-json">
           <span class="sr-ico">${icon('download')}</span>
-          <span class="sr-main"><b>Ekspor backup (JSON)</b><small>Simpan semua motor, catatan, dan pengingat</small></span>
+          <span class="sr-main"><b>Ekspor backup (JSON)</b><small>Simpan ke file HP · ${backupLabel}</small></span>
           ${icon('chevron-right', 'chev')}
         </button>
         <button class="settings-row" data-act="import-json">
