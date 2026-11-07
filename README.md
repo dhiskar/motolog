@@ -31,7 +31,7 @@ Aplikasi web (PWA) sederhana untuk mencatat perawatan sepeda motor: ganti oli, s
 4. Untuk memasang: menu browser → **Instal aplikasi** / **Tambahkan ke layar utama**.
 5. Buka MotoLog dari layar utama. Data tetap ada meski offline.
 
-> **Penting:** data terikat pada browser dan alamat situs. Menghapus data browser, memakai mode incognito, atau mengganti domain dapat menghilangkan data. Lakukan **Pengaturan → Ekspor JSON** secara berkala sebagai backup.
+> **Penting:** data terikat pada browser dan alamat situs. Menghapus data browser, memakai mode incognito, atau mengganti domain dapat menghilangkan data. Aktifkan **Pengaturan → Backup otomatis ke file** agar data punya salinan di penyimpanan HP.
 
 ### Menyimpan backup ke file HP
 
@@ -40,6 +40,19 @@ Aplikasi web (PWA) sederhana untuk mencatat perawatan sepeda motor: ganti oli, s
 - File JSON berisi semua motor, catatan, pengingat, dan foto. Simpan juga salinan ke Google Drive atau WhatsApp.
 - Untuk memulihkan: **Pengaturan → Impor backup**.
 - Aplikasi juga berusaha meminta **penyimpanan persisten** agar data tidak mudah dihapus otomatis oleh browser saat ruang penyimpanan menipis. Ini bersifat best-effort dan tetap tidak melindungi dari penghapusan manual “cookie & data situs”.
+
+### Backup otomatis ke file
+
+1. Buka **Pengaturan → Backup otomatis ke file**, lalu pilih lokasi file (misalnya folder **Documents**).
+2. Setiap kali kamu menyimpan, mengubah, atau menghapus catatan, MotoLog langsung menulis ulang file backup itu (sekitar 1 detik setelah perubahan).
+3. Status di Pengaturan menunjukkan nama file dan waktu backup terakhir.
+
+Batasan yang perlu diketahui:
+
+- Browser hanya bisa menulis saat MotoLog sedang terbuka. Saat aplikasi ditutup, data tetap aman di penyimpanan browser dan akan ditulis ke file begitu aplikasi dibuka lagi.
+- Setelah browser ditutup total, Chrome kadang meminta izin akses file lagi. Bila muncul tulisan **“Butuh izin akses file”**, ketuk baris tersebut sekali untuk mengizinkan.
+- Fitur ini paling andal pada Chrome Android 132+ dan saat MotoLog dipasang sebagai aplikasi (PWA). Pada browser yang belum mendukung, gunakan ekspor manual.
+- Backup otomatis tetap tidak bisa mencegah penghapusan manual “cookie & data situs”; file backup di penyimpanan HP tetap ada dan bisa dipulihkan lewat **Impor backup**.
 
 ---
 

@@ -175,6 +175,29 @@
     }
     html += alerts.join('');
 
+    /* pengingat backup */
+    const ab = ML.autoBackup ? ML.autoBackup.status() : null;
+    if (ab && ab.enabled && ab.needsPermission) {
+      html += `<div class="install-banner backup-banner">
+        <span class="ib-ico">${icon('shield')}</span>
+        <span class="ib-txt"><b>Izinkan backup otomatis</b><small>Perubahan belum bisa ditulis ke file backup.</small></span>
+        <button class="btn primary sm" data-act="auto-backup-perm">Izinkan</button>
+      </div>`;
+    } else if (ab && !ab.enabled && ML.autoBackup.supported()) {
+      const lastBackupDay = S.settings.lastBackupAt ? String(S.settings.lastBackupAt).slice(0, 10) : '';
+      const backupAge = lastBackupDay ? ML.daysBetween(lastBackupDay, ML.todayISO()) : null;
+      const nudgeDay = S.settings.backupNudgeAt ? String(S.settings.backupNudgeAt).slice(0, 10) : '';
+      const nudgeAge = nudgeDay ? ML.daysBetween(nudgeDay, ML.todayISO()) : null;
+      if ((backupAge == null || backupAge >= 7) && (nudgeAge == null || nudgeAge >= 7)) {
+        html += `<div class="install-banner backup-banner">
+          <span class="ib-ico">${icon('shield')}</span>
+          <span class="ib-txt"><b>Amankan data kamu</b><small>Aktifkan backup otomatis agar setiap catatan ikut tersimpan ke file di HP.</small></span>
+          <button class="btn primary sm" data-act="auto-backup">Aktifkan</button>
+          <button class="icon-btn" data-act="dismiss-backup" aria-label="Tutup">${icon('x')}</button>
+        </div>`;
+      }
+    }
+
     /* install */
     if (!isStandalone() && !S.settings.installDismissed) {
       html += `<div class="install-banner">
@@ -605,6 +628,23 @@
       ? 'terakhir ' + lastBackup.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
       : 'belum pernah backup';
 
+    const ab = ML.autoBackup ? ML.autoBackup.status() : { enabled: false, needsPermission: false };
+    const abSupported = ML.autoBackup ? ML.autoBackup.supported() : false;
+    let abLabel;
+    if (!abSupported) {
+      abLabel = 'Belum didukung browser ini · gunakan ekspor manual';
+    } else if (!ab.enabled) {
+      abLabel = 'Tulis file otomatis setiap ada perubahan';
+    } else if (ab.needsPermission) {
+      abLabel = 'Butuh izin akses file · ketuk untuk mengizinkan';
+    } else {
+      const when = ab.lastAt ? new Date(ab.lastAt) : null;
+      const whenText = when && !isNaN(when.getTime())
+        ? when.toLocaleString('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+        : 'menunggu perubahan';
+      abLabel = 'Aktif · ' + (ab.fileName || 'file backup') + ' · ' + whenText + ' · ketuk untuk mematikan';
+    }
+
     return `${pageHead('Pengaturan', 'Preferensi, data, dan aplikasi')}
 
       <section class="card">
@@ -647,6 +687,16 @@
           <span class="sr-main"><b>Ekspor backup (JSON)</b><small>Simpan ke file HP · ${backupLabel}</small></span>
           ${icon('chevron-right', 'chev')}
         </button>
+        <button class="settings-row" data-act="auto-backup"${abSupported ? '' : ' disabled'}>
+          <span class="sr-ico">${icon('shield')}</span>
+          <span class="sr-main"><b>Backup otomatis ke file</b><small>${esc(abLabel)}</small></span>
+          ${ab.enabled ? '<span class="sr-badge">Aktif</span>' : icon('chevron-right', 'chev')}
+        </button>
+        ${ab.enabled && ab.needsPermission ? `<button class="settings-row" data-act="auto-backup-perm">
+          <span class="sr-ico">${icon('check')}</span>
+          <span class="sr-main"><b>Izinkan akses file backup</b><small>Diperlukan agar backup bisa ditulis lagi</small></span>
+          ${icon('chevron-right', 'chev')}
+        </button>` : ''}
         <button class="settings-row" data-act="import-json">
           <span class="sr-ico">${icon('upload')}</span>
           <span class="sr-main"><b>Impor backup</b><small>Pulihkan data dari file backup</small></span>

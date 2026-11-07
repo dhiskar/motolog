@@ -91,13 +91,17 @@
     return 'downloaded';
   }
 
-  async function exportJSON() {
-    const payload = {
+  function buildPayload() {
+    return {
       app: 'MotoLog',
       version: ML.APP_VERSION,
       exportedAt: new Date().toISOString(),
       data: S
     };
+  }
+
+  async function exportJSON() {
+    const payload = buildPayload();
     const result = await saveFile(
       'motolog-backup-' + ML.todayISO() + '.json',
       JSON.stringify(payload, null, 2),
@@ -144,6 +148,267 @@
     if (result === 'cancelled') return;
     ML.toast(result === 'saved' ? 'CSV disimpan ke file' : 'CSV diunduh ke folder Download', 'good');
   }
+
+  /* ---------------- backup otomatis ke file ---------------- */
+  // Menyimpan salinan data ke file JSON pilihan pengguna setiap kali ada
+  // perubahan. Butuh File System Access API + izin akses file. Tanpa API
+  // tersebut, pengguna tetap bisa memakai ekspor manual.
+  const AB_KEY = 'motolog.autobackup.v1';
+  const AB_DB_NAME = 'motolog-fs';
+  const AB_DB_STORE = 'handles';
+  const AB_HANDLE_KEY = 'autobackup';
+
+  function abSupported() {
+    return !!(window.showSaveFilePicker && window.isSecureContext);
+  }
+
+  function abStatus() {
+    let parsed = null;
+    try { parsed = JSON.parse(localStorage.getItem(AB_KEY) || 'null'); } catch (e) { parsed = null; }
+    const st = parsed && typeof parsed === 'object' ? parsed : {};
+    return {
+      enabled: !!st.enabled,
+      fileName: typeof st.fileName === 'string' ? st.fileName : '',
+      lastAt: typeof st.lastAt === 'string' ? st.lastAt : null,
+      needsPermission: !!st.needsPermission,
+      error: typeof st.error === 'string' ? st.error : ''
+    };
+  }
+
+  function abSave(next) {
+    try { localStorage.setItem(AB_KEY, JSON.stringify(next)); } catch (e) { /* diabaikan */ }
+  }
+
+  let abDbPromise = null;
+  let abMemoryHandle = null;
+  function abDb() {
+    if (abDbPromise) return abDbPromise;
+    abDbPromise = new Promise(function (resolve, reject) {
+      if (!window.indexedDB) { reject(new Error('indexeddb-tidak-tersedia')); return; }
+      const req = indexedDB.open(AB_DB_NAME, 1);
+      req.onupgradeneeded = function () {
+        const db = req.result;
+        if (!db.objectStoreNames.contains(AB_DB_STORE)) db.createObjectStore(AB_DB_STORE);
+      };
+      req.onsuccess = function () { resolve(req.result); };
+      req.onerror = function () { reject(req.error || new Error('gagal-membuka-indexeddb')); };
+    });
+    return abDbPromise;
+  }
+
+  function abGetHandle() {
+    if (abMemoryHandle) return Promise.resolve(abMemoryHandle);
+    return abDb().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        const tx = db.transaction(AB_DB_STORE, 'readonly');
+        const req = tx.objectStore(AB_DB_STORE).get(AB_HANDLE_KEY);
+        req.onsuccess = function () { resolve(req.result || null); };
+        req.onerror = function () { reject(req.error || new Error('gagal-membaca-handle')); };
+      });
+    });
+  }
+
+  function abStoreHandle(handle, deleting) {
+    if (deleting) abMemoryHandle = null;
+    else abMemoryHandle = handle;
+
+    return abDb().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        const tx = db.transaction(AB_DB_STORE, 'readwrite');
+        const store = tx.objectStore(AB_DB_STORE);
+        if (deleting) store.delete(AB_HANDLE_KEY);
+        else store.put(handle, AB_HANDLE_KEY);
+        tx.oncomplete = function () { resolve('saved'); };
+        tx.onerror = function () { reject(tx.error || new Error('gagal-menulis-handle')); };
+      });
+    }).catch(function () {
+      // IndexedDB tidak tersedia: izin file tetap dipakai selama sesi ini.
+      return 'memory';
+    });
+  }
+
+  function abCheckPermission(handle) {
+    if (!handle || !handle.queryPermission) return Promise.resolve('granted');
+    return handle.queryPermission({ mode: 'readwrite' }).catch(function () { return 'prompt'; });
+  }
+
+  let abTimer = null;
+  let abWriting = false;
+  let abAgain = false;
+  let abErrorShown = false;
+
+  function abSchedule() {
+    if (!abStatus().enabled) return;
+    if (abTimer) clearTimeout(abTimer);
+    abTimer = setTimeout(function () { abTimer = null; abFlush(); }, 800);
+  }
+
+  async function abFlush() {
+    const st = abStatus();
+    if (!st.enabled) return;
+    if (abWriting) { abAgain = true; return; }
+    abWriting = true;
+
+    try {
+      const handle = await abGetHandle();
+      if (!handle) {
+        abSave(Object.assign({}, st, { enabled: false, error: 'File backup tidak ditemukan' }));
+        return;
+      }
+
+      const perm = await abCheckPermission(handle);
+      if (perm !== 'granted') {
+        abSave(Object.assign({}, st, { needsPermission: true }));
+        return;
+      }
+
+      const payload = buildPayload();
+      const writable = await handle.createWritable();
+      await writable.write(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }));
+      await writable.close();
+
+      abSave({
+        enabled: true,
+        fileName: st.fileName || handle.name || 'motolog-autobackup.json',
+        lastAt: payload.exportedAt,
+        needsPermission: false,
+        error: ''
+      });
+      abErrorShown = false;
+    } catch (e) {
+      const name = e && e.name ? e.name : '';
+      const needsPermission = name === 'NotAllowedError' || name === 'SecurityError';
+      abSave(Object.assign({}, st, {
+        needsPermission: needsPermission || st.needsPermission,
+        error: name || 'Gagal menulis file backup'
+      }));
+      if (!abErrorShown && !needsPermission) {
+        abErrorShown = true;
+        ML.toast('Backup otomatis gagal. Cek izin file di Pengaturan.', 'bad');
+      }
+      if (ML.currentRoute() === 'settings') ML.render();
+    } finally {
+      abWriting = false;
+      if (abAgain) { abAgain = false; abSchedule(); }
+    }
+  }
+
+  async function enableAutoBackup() {
+    if (!abSupported()) {
+      ML.toast('Browser ini belum mendukung backup otomatis. Gunakan ekspor manual.', 'bad');
+      return;
+    }
+
+    let handle;
+    try {
+      handle = await window.showSaveFilePicker({
+        suggestedName: 'motolog-autobackup.json',
+        types: [{
+          description: 'Backup otomatis MotoLog (.json)',
+          accept: { 'application/json': ['.json'] }
+        }]
+      });
+    } catch (e) {
+      if (e && e.name === 'AbortError') return;
+      ML.toast('Gagal memilih file backup', 'bad');
+      return;
+    }
+
+    try {
+      await abStoreHandle(handle, false);
+    } catch (e) {
+      ML.toast('Browser ini tidak bisa menyimpan izin file', 'bad');
+      return;
+    }
+
+    abSave({
+      enabled: true,
+      fileName: handle.name || 'motolog-autobackup.json',
+      lastAt: null,
+      needsPermission: false,
+      error: ''
+    });
+    if (ML.currentRoute() === 'settings') ML.render();
+
+    await abFlush();
+    const st = abStatus();
+    ML.render();
+    if (st.lastAt) ML.toast('Backup otomatis aktif. Setiap perubahan langsung ditulis ke file.', 'good');
+    else ML.toast('File dipilih. Izinkan akses agar backup bisa ditulis.', 'bad');
+  }
+
+  async function disableAutoBackup() {
+    const ok = await ML.askConfirm({
+      title: 'Matikan backup otomatis?',
+      message: 'Data tetap tersimpan di browser, tetapi tidak lagi ditulis otomatis ke file.',
+      okText: 'Matikan'
+    });
+    if (!ok) return;
+
+    abSave({ enabled: false, fileName: abStatus().fileName, lastAt: abStatus().lastAt, needsPermission: false, error: '' });
+    try { await abStoreHandle(null, true); } catch (e) { /* diabaikan */ }
+    if (abTimer) { clearTimeout(abTimer); abTimer = null; }
+    ML.render();
+    ML.toast('Backup otomatis dimatikan');
+  }
+
+  async function requestAutoBackupPermission() {
+    try {
+      const handle = await abGetHandle();
+      if (!handle) {
+        ML.toast('File backup tidak ditemukan. Aktifkan ulang backup otomatis.', 'bad');
+        return;
+      }
+      const perm = await handle.requestPermission({ mode: 'readwrite' });
+      if (perm !== 'granted') {
+        ML.toast('Izin akses file belum diberikan', 'bad');
+        return;
+      }
+      abSave(Object.assign({}, abStatus(), { needsPermission: false, error: '' }));
+      await abFlush();
+      ML.render();
+      ML.toast(abStatus().lastAt ? 'Izin diberikan, backup sudah diperbarui' : 'Izin diberikan', 'good');
+    } catch (e) {
+      ML.toast('Gagal meminta izin file', 'bad');
+    }
+  }
+
+  async function initAutoBackup() {
+    const st = abStatus();
+    if (!st.enabled) return;
+    if (!abSupported()) {
+      abSave(Object.assign({}, st, { enabled: false, error: 'Browser tidak mendukung' }));
+      if (ML.currentRoute() === 'settings') ML.render();
+      return;
+    }
+
+    try {
+      const handle = await abGetHandle();
+      if (!handle) {
+        abSave(Object.assign({}, st, { enabled: false, error: 'File backup tidak ditemukan' }));
+        ML.render();
+        ML.toast('Backup otomatis berhenti. Aktifkan ulang di Pengaturan.', 'bad');
+        return;
+      }
+      const perm = await abCheckPermission(handle);
+      abSave(Object.assign({}, st, { needsPermission: perm !== 'granted', error: '' }));
+      if (perm === 'granted') abFlush();
+      else if (ML.currentRoute() === 'settings' || ML.currentRoute() === 'dash') ML.render();
+    } catch (e) {
+      /* IndexedDB tidak tersedia; biarkan data tetap di localStorage */
+    }
+  }
+
+  ML.autoBackup = {
+    supported: abSupported,
+    status: abStatus,
+    enable: enableAutoBackup,
+    disable: disableAutoBackup,
+    requestPermission: requestAutoBackupPermission,
+    schedule: abSchedule,
+    flush: abFlush
+  };
+  ML.onPersist = abSchedule;
 
   async function importFile(file) {
     if (!file) return;
@@ -402,6 +667,21 @@
       case 'export-json':
         exportJSON();
         break;
+      case 'auto-backup': {
+        const ab = ML.autoBackup.status();
+        if (ab.enabled && ab.needsPermission) requestAutoBackupPermission();
+        else if (ab.enabled) disableAutoBackup();
+        else enableAutoBackup();
+        break;
+      }
+      case 'auto-backup-perm':
+        requestAutoBackupPermission();
+        break;
+      case 'dismiss-backup':
+        S.settings.backupNudgeAt = new Date().toISOString();
+        ML.persist();
+        ML.render();
+        break;
       case 'export-csv':
         exportCSV();
         break;
@@ -549,6 +829,12 @@
   window.addEventListener('online', function () { ML.updateSettingsInfo(); });
   window.addEventListener('offline', function () { ML.updateSettingsInfo(); });
 
+  // Tulis backup terakhir saat aplikasi ditinggalkan (best-effort).
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'hidden') abFlush();
+  });
+  window.addEventListener('pagehide', function () { abFlush(); });
+
   if (window.matchMedia) {
     const mq = window.matchMedia('(prefers-color-scheme: dark)');
     const onChange = function () {
@@ -576,6 +862,7 @@
     requestPersistentStorage();
     applyTheme();
     ML.render();
+    initAutoBackup();
     if (window.scrollY > 4) {
       const topbar = document.getElementById('topbar');
       if (topbar) topbar.classList.add('scrolled');

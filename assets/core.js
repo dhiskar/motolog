@@ -8,7 +8,7 @@ window.ML = (function () {
   const ML = {};
 
   const STORAGE_KEY = 'motolog.state.v1';
-  const APP_VERSION = '1.0.1';
+  const APP_VERSION = '1.0.2';
 
   const TYPE_META = {
     oil:    { label: 'Ganti oli',   short: 'Oli',    icon: 'droplet', tone: 'oil',    color: '#f97316' },
@@ -131,7 +131,8 @@ window.ML = (function () {
         oilMonths: 4,
         activeBike: null,
         installDismissed: false,
-        lastBackupAt: null
+        lastBackupAt: null,
+        backupNudgeAt: null
       }
     };
   }
@@ -207,6 +208,7 @@ window.ML = (function () {
     st.settings.oilMonths = Math.max(1, Math.min(36, num(s.oilMonths) || 4));
     st.settings.installDismissed = !!s.installDismissed;
     st.settings.lastBackupAt = typeof s.lastBackupAt === 'string' && s.lastBackupAt ? s.lastBackupAt : null;
+    st.settings.backupNudgeAt = typeof s.backupNudgeAt === 'string' && s.backupNudgeAt ? s.backupNudgeAt : null;
     if (st.bikes.some((b) => b.id === s.activeBike)) st.settings.activeBike = s.activeBike;
     else st.settings.activeBike = st.bikes[0] ? st.bikes[0].id : null;
 
@@ -233,14 +235,20 @@ window.ML = (function () {
   }
 
   function persist() {
+    let ok = false;
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-      return true;
+      ok = true;
     } catch (e) {
-      if (ML.toast) ML.toast('Penyimpanan penuh. Hapus foto atau ekspor data lama.', 'bad');
+      if (ML.toast) ML.toast('Penyimpanan browser penuh. Hapus foto atau aktifkan backup otomatis ke file.', 'bad');
       else console.warn('Gagal menyimpan', e);
-      return false;
     }
+    // Backup otomatis tetap dijalankan walau localStorage penuh, supaya data
+    // masih punya salinan di file.
+    if (ML.onPersist) {
+      try { ML.onPersist(); } catch (e) { /* backup otomatis tidak boleh mengganggu penyimpanan */ }
+    }
+    return ok;
   }
 
   function commit(opts) {

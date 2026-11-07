@@ -7,7 +7,7 @@
    =========================================================== */
 'use strict';
 
-const CACHE_VERSION = 'motolog-v1.0.1';
+const CACHE_VERSION = 'motolog-v1.0.2';
 const CACHE_NAME = CACHE_VERSION;
 const INDEX_URL = new URL('./index.html', self.location).href;
 
